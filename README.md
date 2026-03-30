@@ -1,4 +1,4 @@
-# Aegis — Local AI Log Analyzer
+# Aegis — Intelligent Log Analyzer
 
 A privacy-first cybersecurity tool that uses a locally hosted LLM to analyze server logs and detect attack patterns. Zero data leaves your machine.
 
