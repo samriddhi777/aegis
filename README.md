@@ -1,8 +1,8 @@
 # Aegis — Locally Hosted Log Analyzer
 
-For ages, log analysis has been a tedious and repetitive process for cybersecurity professionals; going through thousands of logs and coming to  final verdict after hours of looking. As the trend of AI rose within the digital world, log analysis became one among the many repetetive tasks that was automated using intelligent ML algorithms, fetching efficient results and ready-made reports.
+For ages, log analysis has been a tedious and repetitive process for cybersecurity professionals; going through thousands of logs and coming to  final verdict after hours of looking. As the trend of AI rose within the digital world, log analysis became one among the many repetitive tasks that was automated using intelligent ML algorithms, fetching efficient results and ready-made reports.
 
-In the scope of security, the automation of log analysis came as a tradeoff - any SOC analyst using AI to analyse logs got thier report at hand in mere seconds, only at the cost of thier system's logs being exposed to the AI, which, at an organisational or even personal level, is a massive privacy concern.
+In the scope of security, the automation of log analysis came as a tradeoff - any SOC analyst using AI to analyse logs got their report at hand in mere seconds, only at the cost of their system's logs being exposed to the AI, which, at an organisational or even personal level, is a massive privacy concern.
 
 Introducing AEGIS (Version 1.0) - A privacy first log analyser that uses a locally hosted LLM (Llama 3.2 3B) to analyse server logs and flag malicious patterns, without your data ever leaving your machine.
 
