@@ -59,39 +59,48 @@ The backend was built with a clear separation of concerns. Think of it as a thre
 
 The pre-processing layer is the most important part of the project. It is what distinguishes Aegis from a simple LLM wrapper. Every IP address, username, and failed attempt count is extracted by your own regex code before the AI sees anything.
 
-Imports and application setup:
+- Imports and application setup:
+
 The main.py file begins by importing the tools needed from each library. FastAPI is initialized as an application object, and CORS middleware is attached to it. CORS (Cross-Origin Resource Sharing) is a browser security mechanism that blocks requests between different ports by default. The frontend runs on port 5173 and the backend on port 8000, so without this middleware the browser would reject every request from the frontend.
 app = FastAPI(title='Aegis Log Analyzer')
 app.add_middleware(CORSMiddleware, allow_origins=['http://localhost:5173'], ...)
 
-Data validation with Pydantic:
+- Data validation with Pydantic:
+
 When the frontend sends a log to the backend, it arrives as JSON. Pydantic's BaseModel validates the incoming data automatically before any code touches it. The LogRequest class declares that the request must contain a field called log_content that is a string. If the frontend sends a malformed request, FastAPI rejects it instantly with a clear error message.
 class LogRequest(BaseModel):
     log_content: str
 
-Pre-processing layer:
+- Pre-processing layer:
+
 This is the core of what makes Aegis a real security tool rather than a chatbot. Four functions run on every log before Ollama is involved:
 
-detect_log_type
-Uses regex pattern matching to identify whether the log is an SSH authentication log, an Apache/Nginx access log, a Linux privilege log, or a generic system log. The detection works by searching for signature strings unique to each log type — for example, the word sshd or the phrase Failed password identifies SSH logs.
+    detect_log_type:
 
-extract_ip_addresses
-A regular expression pattern matches the structure of an IPv4 address — three groups of one to three digits separated by dots, followed by a final group of digits. The set() function removes duplicates so the same attacking IP is only listed once. A final validation step ensures each octet falls between 0 and 255.
+    Uses regex pattern matching to identify whether the log is an SSH authentication log, an Apache/Nginx access log, a Linux privilege log, or a generic system log. The detection works by searching for signature strings unique to each log type — for example, the word sshd or the phrase Failed password identifies SSH logs.
 
-extract_usernames
-Three separate patterns handle the different ways authentication logs record usernames — with or without the phrase 'invalid user', and for both failed and successful logins. Using multiple patterns ensures no username is missed regardless of log format.
+    extract_ip_addresses:
 
-count_failed_attempts
-Counts every occurrence of failure-indicating phrases across the entire log. This single number is the most important brute force indicator — a high count from a single IP over a short time window is definitively suspicious.
+    A regular expression pattern matches the structure of an IPv4 address — three groups of one to three digits separated by dots, followed by a final group of digits. The set() function removes duplicates so the same attacking IP is only listed once. A final validation step ensures each octet falls between 0 and 255.
 
-All four functions are called by a single orchestrating function, preprocess_log(), which returns a clean dictionary containing all extracted metadata. This dictionary is passed alongside the raw log to the prompt builder.
+    extract_usernames:
 
-Prompt engineering: 
+    Three separate patterns handle the different ways authentication logs record usernames — with or without the phrase 'invalid user', and for both failed and successful logins. Using multiple patterns ensures no username is missed regardless of log format.
+
+    count_failed_attempts:
+
+    Counts every occurrence of failure-indicating phrases across the entire log. This single number is the most important brute force indicator — a high count from a single IP over a short time window is definitively suspicious.
+
+    All four functions are called by a single orchestrating function, preprocess_log(), which returns a clean dictionary containing all extracted metadata. This dictionary is passed alongside the raw log to the prompt builder.
+
+- Prompt engineering: 
+
 The build_prompt() function constructs the instruction that gets sent to Ollama. It injects both the raw log and the pre-extracted metadata into a structured template. The AI is instructed to respond in a specific format — SEVERITY, ATTACK CLASSIFICATION, WHAT HAPPENED, INDICATORS OF COMPROMISE, and RECOMMENDED ACTIONS — ensuring consistent, parseable output every time.
 
 The temperature parameter is set to 0.1, close to zero. Temperature controls how creative the model is. For security analysis, creativity is undesirable — you want factual, consistent output, not imaginative interpretation.
 
-Streaming API endpoint:
+- Streaming API endpoint:
+
 The /analyze endpoint receives POST requests containing log content. Two validation checks run first — rejecting empty logs and logs exceeding 50,000 characters. Then the pre-processing runs, the prompt is built, and the response begins streaming.
 
 Streaming means the response is sent back word by word as Ollama generates it, rather than waiting for the entire response to complete. This is implemented using FastAPI's StreamingResponse with server-sent events. The frontend receives each token as it arrives and appends it to the display, creating the typing effect seen in the UI.
