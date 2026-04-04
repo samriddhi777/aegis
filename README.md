@@ -47,12 +47,14 @@ Simple as is, but powerful regardless. AEGIS follows a 3 layer pipelined archite
 
 React Frontend → FastAPI Backend → Pre-processing layer → Ollama (local LLM)
 
-Frontend: 
+**Frontend**: 
+
 The frontend built with React and Vile. React manages the user interfact as a collection of components that automatically update when their data changes, and Vite is a build tool that provides a fast development server with hot module replacement. When you save a file, the browser updates instantly without a full page reload.
 
 TailwindCSS handles the styling through utility classes directly in the JSX. react-markdown renders the AI's markdown-formatted response as proper HTML with headings, bold text and lists.
 
-Backend:
+**Backend**:
+
 The backend was built with a clear separation of concerns. Think of it as a three-layer pipeline: the request comes in from the frontend, passes through the pre-processing layer where your own code extracts structure from the raw log, then gets handed to Ollama with a carefully engineered prompt. The response streams back token by token to the frontend.
 
 The pre-processing layer is the most important part of the project. It is what distinguishes Aegis from a simple LLM wrapper. Every IP address, username, and failed attempt count is extracted by your own regex code before the AI sees anything.
