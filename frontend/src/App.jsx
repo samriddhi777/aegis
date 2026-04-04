@@ -44,42 +44,49 @@ Dec 10 10:45:00 server sshd[1501]: pam_unix(sshd:session): session closed for us
 };
 
 const SEVERITY_COLORS = {
-  CRITICAL: "bg-red-100 text-red-800 border-red-200",
-  HIGH: "bg-orange-100 text-orange-800 border-orange-200",
-  MEDIUM: "bg-yellow-100 text-yellow-800 border-yellow-200",
-  LOW: "bg-blue-100 text-blue-800 border-blue-200",
-  CLEAN: "bg-green-100 text-green-800 border-green-200",
+  CRITICAL: "bg-red-900 text-red-300 border-red-700",
+  HIGH: "bg-orange-900 text-orange-300 border-orange-700",
+  MEDIUM: "bg-yellow-900 text-yellow-300 border-yellow-700",
+  LOW: "bg-blue-900 text-blue-300 border-blue-700",
+  CLEAN: "bg-green-900 text-green-300 border-green-700",
 };
 
 function MetadataPanel({ metadata }) {
   if (!metadata) return null;
-  const flagColor = metadata.pre_analysis_flags?.length > 0
-    ? "border-orange-300 bg-orange-50"
-    : "border-green-300 bg-green-50";
+  const hasFlags = metadata.failed_attempts > 0;
 
   return (
-    <div className={`rounded-lg border p-4 mb-4 text-sm ${flagColor}`}>
-      <p className="font-semibold text-gray-700 mb-2">Pre-analysis scan</p>
-      <div className="grid grid-cols-2 gap-2 text-gray-600 mb-2">
-        <span>Type: <strong>{metadata.log_type}</strong></span>
-        <span>Lines: <strong>{metadata.total_lines}</strong></span>
-        <span>Failed attempts: <strong>{metadata.failed_attempts}</strong></span>
-        <span>Successes: <strong>{metadata.successful_attempts}</strong></span>
+    <div className={`rounded-lg border p-4 mb-4 text-sm ${hasFlags ? "border-orange-700 bg-orange-950" : "border-green-700 bg-green-950"}`}>
+      <p className="font-semibold text-gray-300 mb-2">Pre-analysis scan</p>
+      <div className="grid grid-cols-2 gap-2 text-gray-400 mb-2">
+        <span>Type: <strong className="text-gray-200">{metadata.log_type}</strong></span>
+        <span>Lines: <strong className="text-gray-200">{metadata.line_count}</strong></span>
+        <span>Failed attempts: <strong className="text-gray-200">{metadata.failed_attempts}</strong></span>
+        <span>IPs found: <strong className="text-gray-200">{metadata.ip_addresses?.length || 0}</strong></span>
       </div>
-      {metadata.unique_ips?.length > 0 && (
-        <p className="text-gray-600">IPs: <strong>{metadata.unique_ips.join(", ")}</strong></p>
+      {metadata.ip_addresses?.length > 0 && (
+        <p className="text-gray-400">IPs: <strong className="text-gray-200">{metadata.ip_addresses.join(", ")}</strong></p>
       )}
-      {metadata.pre_analysis_flags?.length > 0 && (
-        <div className="mt-2">
-          {metadata.pre_analysis_flags.map((f, i) => (
-            <p key={i} className="text-orange-700 font-medium">⚠ {f}</p>
-          ))}
-        </div>
+      {metadata.usernames?.length > 0 && (
+        <p className="text-gray-400 mt-1">Usernames targeted: <strong className="text-gray-200">{metadata.usernames.join(", ")}</strong></p>
       )}
-      {metadata.pre_analysis_flags?.length === 0 && (
-        <p className="text-green-700 font-medium">✓ No suspicious patterns detected in pre-scan</p>
-      )}
+      {hasFlags
+        ? <p className="text-orange-400 font-medium mt-2">⚠ Suspicious patterns detected in pre-scan</p>
+        : <p className="text-green-400 font-medium mt-2">✓ No suspicious patterns detected in pre-scan</p>
+      }
     </div>
+  );
+}
+
+function SeverityBadge({ output }) {
+  const match = output.match(/\*\*SEVERITY:\*\*\s*(CRITICAL|HIGH|MEDIUM|LOW|CLEAN)/i);
+  if (!match) return null;
+  const level = match[1].toUpperCase();
+  const colors = SEVERITY_COLORS[level] || "";
+  return (
+    <span className={`inline-block px-3 py-1 rounded-full border text-xs font-bold tracking-widest mb-3 ${colors}`}>
+      {level}
+    </span>
   );
 }
 
@@ -113,29 +120,32 @@ export default function App() {
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let fullText = "";
-      let metaParsed = false;
+      let buffer = "";
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        const chunk = decoder.decode(value);
 
-        if (!metaParsed && chunk.startsWith("METADATA:")) {
-          const metaLine = chunk.split("\n")[0];
-          const metaJson = metaLine.replace("METADATA:", "");
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop();
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
           try {
-            setMetadata(JSON.parse(metaJson));
+            const parsed = JSON.parse(line.slice(6));
+            if (parsed.type === "metadata") {
+              setMetadata(parsed.data);
+            } else if (parsed.type === "token") {
+              fullText += parsed.data;
+              setOutput(fullText);
+              if (outputRef.current) {
+                outputRef.current.scrollTop = outputRef.current.scrollHeight;
+              }
+            } else if (parsed.type === "done") {
+              setLoading(false);
+            }
           } catch {}
-          const rest = chunk.slice(metaLine.length + 1);
-          fullText += rest;
-          metaParsed = true;
-        } else {
-          fullText += chunk;
-        }
-
-        setOutput(fullText);
-        if (outputRef.current) {
-          outputRef.current.scrollTop = outputRef.current.scrollHeight;
         }
       }
     } catch (e) {
@@ -167,22 +177,20 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100 font-mono">
-      {/* Header */}
       <div className="border-b border-gray-800 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-          <span className="text-green-600 font-bold text-lg tracking-wider">AEGIS</span>
+          <span className="text-green-400 font-bold text-lg tracking-wider">AEGIS</span>
           <span className="text-gray-500 text-sm">// intelligent log analyzer v1.0</span>
         </div>
         <span className="text-gray-600 text-xs">local · offline · private</span>
       </div>
 
       <div className="flex h-[calc(100vh-65px)]">
-        {/* Left panel — input */}
         <div className="w-1/2 flex flex-col border-r border-gray-800 p-4 gap-3">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-2">
             <span className="text-gray-400 text-xs uppercase tracking-widest">Log Input</span>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               {Object.keys(SAMPLE_LOGS).map((name) => (
                 <button
                   key={name}
@@ -205,15 +213,12 @@ export default function App() {
           <button
             onClick={analyze}
             disabled={loading || !logText.trim()}
-            className="w-full py-3 rounded-lg font-bold text-sm tracking-widest transition-all
-              bg-green-500 text-gray-950 hover:bg-green-400
-              disabled:opacity-40 disabled:cursor-not-allowed"
+            className="w-full py-3 rounded-lg font-bold text-sm tracking-widest transition-all bg-green-500 text-gray-950 hover:bg-green-400 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {loading ? "ANALYZING..." : "ANALYZE LOG"}
           </button>
         </div>
 
-        {/* Right panel — output */}
         <div className="w-1/2 flex flex-col p-4 gap-3">
           <div className="flex items-center justify-between">
             <span className="text-gray-400 text-xs uppercase tracking-widest">Analysis Report</span>
@@ -253,6 +258,8 @@ export default function App() {
             )}
 
             {metadata && <MetadataPanel metadata={metadata} />}
+
+            {output && <SeverityBadge output={output} />}
 
             {output && (
               <div className="prose prose-invert prose-sm max-w-none prose-headings:text-green-400 prose-strong:text-gray-200 prose-li:text-gray-300">
